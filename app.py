@@ -469,10 +469,10 @@ with tab5:
                 col_m1, col_m2, col_m3 = st.columns(3)
                 with col_m1:
                     st.metric("🎯 Silhouette Score", f"{silhouette_avg:.4f}")
-                with col_m2:
-                    st.metric("📊 Davies-Bouldin Index", f"{davies_bouldin:.4f}")
-                with col_m3:
-                    st.metric("🔍 Calinski-Harabasz Index", f"{calinski_harabasz:.2f}")
+                # with col_m2:
+                #     st.metric("📊 Davies-Bouldin Index", f"{davies_bouldin:.4f}")
+                # with col_m3:
+                #     st.metric("🔍 Calinski-Harabasz Index", f"{calinski_harabasz:.2f}")
                 
                 # Visualize clusters using PCA
                 st.markdown("#### 📍 Cluster Visualization (PCA)")
@@ -563,13 +563,13 @@ with tab6:
                 st.metric("🎯 Silhouette Score", f"{silhouette_avg:.4f}", 
                          help="Higher is better (range: -1 to 1)")
             with p2:
-                st.metric("📊 Davies-Bouldin Index", f"{davies_bouldin:.4f}",
+                st.metric("💯 Inertia", f"{inertia:.2f}",
                          help="Lower is better")
-            with p3:
-                st.metric("🔍 Calinski-Harabasz Index", f"{calinski_harabasz:.2f}",
-                         help="Higher is better")
-            with p4:
-                st.metric("💯 Inertia", f"{inertia:.2f}")
+            # with p3:
+            #     st.metric("🔍 Calinski-Harabasz Index", f"{calinski_harabasz:.2f}",
+            #              help="Higher is better")
+            # with p4:
+            #     st.metric("📊 Davies-Bouldin Index", f"{davies_bouldin:.4f}",
             
             # Cluster statistics
             st.markdown("### 📈 Cluster Statistics")
@@ -740,13 +740,11 @@ with tab6:
             
             **Performance:**
             - Silhouette: {silhouette_avg:.4f}
-            - Davies-Bouldin: {davies_bouldin:.4f}
-            - Calinski-Harabasz: {calinski_harabasz:.2f}
+            - Inertia: {inertia:.2f}
             
             **Interpretation:**
             - Higher Silhouette → Better separation
-            - Lower Davies-Bouldin → Better clustering
-            - Higher Calinski-Harabasz → Better defined clusters
+            - Lower Inertia → Tighter clusters
             """)
 
 
