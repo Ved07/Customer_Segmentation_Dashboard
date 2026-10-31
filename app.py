@@ -1,14 +1,19 @@
+from pathlib import Path
+
 import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
-from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 from sklearn.metrics import silhouette_score, davies_bouldin_score, calinski_harabasz_score
 import warnings
 warnings.filterwarnings('ignore')
+
+ROOT_DIR = Path(__file__).resolve().parent
+DEFAULT_DATASET_PATH = ROOT_DIR / "Data" / "Mall_Customers.csv"
 
 # ==================== PAGE CONFIGURATION ====================
 st.set_page_config(
@@ -59,6 +64,8 @@ if 'scaled_data' not in st.session_state:
     st.session_state.scaled_data = None
 if 'predictions' not in st.session_state:
     st.session_state.predictions = None
+if 'feature_order' not in st.session_state:
+    st.session_state.feature_order = []
 
 # ==================== HEADER ====================
 st.markdown("""
@@ -82,6 +89,10 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
 # ==================== TAB 1: DATA UPLOAD ====================
 with tab1:
     st.markdown("## 📤 Upload Your Data")
+    
+    if st.session_state.data is None and DEFAULT_DATASET_PATH.exists():
+        st.session_state.data = pd.read_csv(DEFAULT_DATASET_PATH)
+        st.info("ℹ️ Loaded the bundled sample dataset automatically for demo purposes.")
     
     col1, col2 = st.columns([2, 1])
     
@@ -126,7 +137,14 @@ with tab1:
             """)
             
             if st.button("🔄 Reset Data", use_container_width=True):
-                st.session_state.data = None
+                st.session_state.data = pd.read_csv(DEFAULT_DATASET_PATH) if DEFAULT_DATASET_PATH.exists() else None
+                st.session_state.processed_data = None
+                st.session_state.selected_features = None
+                st.session_state.model = None
+                st.session_state.predictions = None
+                st.session_state.scaler = None
+                st.session_state.scaled_data = None
+                st.session_state.feature_order = []
                 st.rerun()
 
 # ==================== TAB 2: DATA INSIGHTS ====================
@@ -324,6 +342,10 @@ with tab4:
         data = st.session_state.processed_data.copy()
         numeric_cols = data.select_dtypes(include=[np.number]).columns.tolist()
         
+        if len(numeric_cols) < 2:
+            st.error("⚠️ At least two numeric features are required for clustering. Please revisit preprocessing and keep more numerical columns.")
+            st.stop()
+        
         col1, col2 = st.columns([2, 1])
         
         with col1:
@@ -346,7 +368,9 @@ with tab4:
                 help="Select the features you want to use for clustering"
             )
             
-            if selected_features:
+            if len(selected_features) < 2:
+                st.warning("⚠️ Please select at least 2 features before training the model.")
+            else:
                 st.session_state.selected_features = selected_features
                 st.success(f"✅ Selected {len(selected_features)} features for clustering")
             
@@ -369,7 +393,15 @@ with tab5:
     if st.session_state.selected_features is None:
         st.warning("⚠️ Please select features in Feature Selection tab first")
     else:
-        data = st.session_state.processed_data[st.session_state.selected_features].copy()
+        selected_features = st.session_state.selected_features
+        if len(selected_features) < 2:
+            st.error("⚠️ Select at least two features before training the model.")
+            st.stop()
+
+        data = st.session_state.processed_data[selected_features].copy()
+        if len(data) < 2:
+            st.error("⚠️ The processed data must contain at least two rows before training.")
+            st.stop()
         
         col1, col2 = st.columns([2, 1])
         
@@ -378,7 +410,6 @@ with tab5:
             
             # Data scaling
             st.markdown("#### 1️⃣ Data Scaling")
-           # ALWAYS retrain scaler on selected features
             scaler = StandardScaler()
 
             # Store feature order used in training
@@ -394,8 +425,10 @@ with tab5:
             
             # Determine optimal number of clusters
             st.markdown("#### 2️⃣ Find Optimal Clusters")
-            
-            max_k = min(10, len(data) - 1)
+            max_k = min(10, len(data))
+            if max_k < 2:
+                st.error("⚠️ The dataset is too small to train K-Means.")
+                st.stop()
             
             if st.button("🔍 Analyze Elbow Method", use_container_width=True):
                 inertias = []
@@ -448,7 +481,7 @@ with tab5:
             
             # Select number of clusters
             st.markdown("#### 3️⃣ Select Number of Clusters")
-            n_clusters = st.slider("Choose number of clusters (k)", 2, max_k, 3)
+            n_clusters = st.slider("Choose number of clusters (k)", 2, max_k, min(3, max_k))
             
             # Train model
             st.markdown("#### 4️⃣ Train K-Means Model")
@@ -476,12 +509,14 @@ with tab5:
                 
                 # Visualize clusters using PCA
                 st.markdown("#### 📍 Cluster Visualization (PCA)")
-                pca = PCA(n_components=2)
+                pca = PCA(n_components=min(2, scaled_data.shape[1], scaled_data.shape[0] - 1))
                 pca_data = pca.fit_transform(scaled_data)
                 
                 fig = go.Figure()
                 for cluster in range(n_clusters):
                     cluster_points = pca_data[predictions == cluster]
+                    if len(cluster_points) == 0:
+                        continue
                     fig.add_trace(go.Scatter(
                         x=cluster_points[:, 0],
                         y=cluster_points[:, 1],
@@ -490,9 +525,10 @@ with tab5:
                         marker=dict(size=8)
                     ))
                 
+                centroid_points = pca.transform(kmeans.cluster_centers_)
                 fig.add_trace(go.Scatter(
-                    x=pca.transform(kmeans.cluster_centers_)[:, 0],
-                    y=pca.transform(kmeans.cluster_centers_)[:, 1],
+                    x=centroid_points[:, 0],
+                    y=centroid_points[:, 1],
                     mode='markers',
                     name='Centroids',
                     marker=dict(size=20, symbol='star', color='red')
@@ -500,8 +536,8 @@ with tab5:
                 
                 fig.update_layout(
                     title=f"K-Means Clusters (k={n_clusters})",
-                    xaxis_title=f"PC1 ({pca.explained_variance_ratio_[0]:.2%})",
-                    yaxis_title=f"PC2 ({pca.explained_variance_ratio_[1]:.2%})",
+                    xaxis_title=f"PC1 ({pca.explained_variance_ratio_[0]:.2%})" if pca.n_components > 0 else "PC1",
+                    yaxis_title=f"PC2 ({pca.explained_variance_ratio_[1]:.2%})" if pca.n_components > 1 else "PC2",
                     height=450,
                     hovermode='closest'
                 )
